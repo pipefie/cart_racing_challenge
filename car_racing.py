@@ -1,7 +1,7 @@
 import gymnasium as gym
 from gymnasium.wrappers import RecordEpisodeStatistics, FrameStack, ResizeObservation, GrayScaleObservation
 from stable_baselines3 import PPO, SAC, TD3
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMonitor, VecNormalize
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMonitor, VecNormalize, VecTransposeImage
 from stable_baselines3.common.callbacks import EvalCallback, CheckpointCallback
 from stable_baselines3.common.env_util import make_vec_env
 
@@ -32,6 +32,7 @@ from all of them, and returns their combined batch of observations, rewards, etc
 """
 NUM_ENVS = 8
 venv = SubprocVecEnv([make_env(gray=True) for _ in range(NUM_ENVS)])
+venv = VecTransposeImage(venv, channel_order='first')  # from (N,H,W,C) to (N,C,H,W) because PyTorch convs uses channels first, also SB3 CNN policies expect channels first
 venv = VecMonitor(venv)
 # Optional: normalize obs & rewards (often helpful for PPO)
 venv = VecNormalize(venv, norm_obs=True, norm_reward=True, clip_obs=10.0)
