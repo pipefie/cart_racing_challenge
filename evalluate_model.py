@@ -15,7 +15,7 @@ from stable_baselines3.common.vec_env import (
 
 # --- CONFIGURACIÓN ---
 # ▼▼▼ ¡CAMBIA ESTA LÍNEA PARA ELEGIR QUÉ CHECKPOINT PROBAR! ▼▼▼
-MODEL_PATH = "checkpoints/ppo_carracing_400000_steps.zip"
+MODEL_PATH = "checkpoints/ppo_carracing_2000000_steps.zip"
 # ▲▲▲ ¡CAMBIA ESTA LÍNEA PARA ELEGIR QUÉ CHECKPOINT PROBAR! ▲▲▲
 
 ENV_ID = "CarRacing-v3"  # Usar v2 que es el ID estándar para evitar problemas
