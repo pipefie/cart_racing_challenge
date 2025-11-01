@@ -7,7 +7,10 @@ from gymnasium.wrappers import (
 from gymnasium import ObservationWrapper
 from gymnasium.spaces import Box
 import numpy as np
-
+import logging
+import sys
+from datetime import datetime
+from typing import Callable
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import (
     DummyVecEnv,
@@ -62,6 +65,27 @@ class EnsureChannelLast(ObservationWrapper):
             return obs[..., None]
         return obs
 
+class DiscretizeActionsWrapper(gym.ActionWrapper):
+    """
+    Wrapper para discretizar el espacio de acciones de CarRacing.
+    """
+    def __init__(self, env):
+        super().__init__(env)
+        # 5 acciones: [volante, acelerador, freno]
+        self._actions = [
+            [0.0, 1.0, 0.0],  # 0: Acelerar recto
+            [-1.0, 0.3, 0.0], # 1: Girar a la izquierda
+            [1.0, 0.3, 0.0],  # 2: Girar a la derecha
+            [0.0, 0.0, 0.8],  # 3: Frenar
+            [0.0, 0.0, 0.0],  # 4: No hacer nada
+        ]
+        # El nuevo espacio de acciones es discreto con 5 opciones
+        self.action_space = gym.spaces.Discrete(len(self._actions))
+
+    def action(self, act):
+        # Mapea la acción discreta (ej: 2) a la acción continua correspondiente
+        return np.array(self._actions[act], dtype=np.float32)
+
 def make_env(gray=True, resize_shape=(84, 84), domain_randomize=False):
     """
     Pipeline HWC uint8: (opcional gris con keep_dim) -> resize -> ensure channel last
@@ -69,6 +93,9 @@ def make_env(gray=True, resize_shape=(84, 84), domain_randomize=False):
     def thunk():
         env = gym.make(ENV_ID, domain_randomize=domain_randomize)
         env = RecordEpisodeStatistics(env)
+
+        env = DiscretizeActionsWrapper(env)
+
         if gray:
             env = GrayscaleObservation(env, keep_dim=True)  # (H, W, 1) o (H, W)
         env = ResizeObservation(env, resize_shape)          # (84, 84, C?) o (84, 84)
@@ -76,12 +103,32 @@ def make_env(gray=True, resize_shape=(84, 84), domain_randomize=False):
         return env
     return thunk
 
+def linear_schedule(initial_value: float) -> Callable[[float], float]:
+    """
+    Tasa de aprendizaje que decrece linealmente.
+    """
+    def func(progress_remaining: float) -> float:
+        return progress_remaining * initial_value
+    return func
+
 if __name__ == "__main__":
+
+    log_filename = f"entrenamiento_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.FileHandler(log_filename), # Guardar en archivo
+            logging.StreamHandler(sys.stdout)  # Imprimir en consola
+        ]
+    )
+    
     NUM_ENVS = 8
     N_STACK = 4
 
     # === Entrenamiento: vectorized env ===
-    venv = SubprocVecEnv([make_env(gray=True) for _ in range(NUM_ENVS)])
+    venv = SubprocVecEnv([make_env(gray=True, domain_randomize=True) for _ in range(NUM_ENVS)])
 
     # 1) APILAR FRAMES en HWC
     venv = VecFrameStack(venv, n_stack=N_STACK, channels_order="last")   # -> (H, W, C*N_STACK)
@@ -124,20 +171,20 @@ if __name__ == "__main__":
     model = PPO(
         policy="CnnPolicy",
         env=venv,
-        n_steps=1024,
+        n_steps=2048,
         batch_size=256,
         n_epochs=10,
         gamma=0.99,
         gae_lambda=0.95,
         clip_range=0.2,
-        ent_coef=0.01,
+        ent_coef=0.001,
         vf_coef=0.5,
-        learning_rate=3e-4,
+        learning_rate=linear_schedule(3e-4),
         verbose=1,
         tensorboard_log="./tb/",
         device="auto",
         policy_kwargs=policy_kwargs,
     )
 
-    model.learn(total_timesteps=2_000_000, callback=[eval_cb, ckpt_cb])
+    model.learn(total_timesteps=5_000_000, callback=[eval_cb, ckpt_cb])
     model.save("ppo_carracing_final")
