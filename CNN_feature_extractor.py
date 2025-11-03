@@ -17,13 +17,13 @@ class CNN_feature_extraction(BaseFeaturesExtractor):
 
         self.conv = nn.Sequential(
             nn.Conv2d(c, 32, kernel_size=8, stride=4),  # -> (N, 32, 20, 20) si 84x84
-            nn.BatchNorm2d(32),
+
             nn.ReLU(inplace=True),
             nn.Conv2d(32, 64, kernel_size=4, stride=2), # -> (N, 64, 9, 9)
-            nn.BatchNorm2d(64),
+
             nn.ReLU(inplace=True),
             nn.Conv2d(64, 64, kernel_size=3, stride=1), # -> (N, 64, 7, 7)
-            nn.BatchNorm2d(64),
+
             nn.ReLU(inplace=True),
             nn.Flatten(),                                # -> (N, 7*7*64)
         )
