@@ -29,6 +29,7 @@ from wrappers import (
     GentleShapingWrapper,
     RandomShift,
     RewardPenaltyWrapper,
+    SpeedRewardWrapper,
     RewardScaleWrapper,
 )
 
@@ -47,6 +48,8 @@ class EnvConfig:
     use_reward_penalty: bool = True
     reward_penalty_value: float = 1.5
     reward_green_ratio: float = 1.3
+    speed_reward_scale: float = 0.0
+    speed_reward_power: float = 1.0
     reward_scale: float = 1.0
     use_gentle_shaping: bool = False
     gentle_lambda_delta: float = 1e-3
@@ -89,6 +92,13 @@ def make_env(
                 env,
                 penalty=cfg.reward_penalty_value,
                 green_ratio_threshold=cfg.reward_green_ratio,
+            )
+
+        if cfg.speed_reward_scale > 0.0:
+            env = SpeedRewardWrapper(
+                env,
+                scale=cfg.speed_reward_scale,
+                power=cfg.speed_reward_power,
             )
 
         if cfg.gray:

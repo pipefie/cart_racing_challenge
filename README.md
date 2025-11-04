@@ -20,7 +20,8 @@ Key toggles:
 - `--discrete-actions` / `--continuous-actions` switch between discrete wrapper and native continuous control.
 - `--action-repeat K` adjusts frame skipping (default 4).
 - `--use-gentle-shaping` (train) and `--gentle-shaping-eval` (eval) toggle shaping penalties.
-- `--reward-penalty-value` / `--reward-scale` tune shaping severity and reward magnitude (set scale to `1.0` to disable).
+- `--speed-reward-scale` / `--speed-reward-power` add optional bonuses proportional to the car's speed.
+- `--reward-penalty-value` / `--reward-scale` tune shaping severity and overall reward magnitude (set scale to `1.0` to disable scaling).
 - `--random-shift-train` / `--random-shift-eval` control DrQ augmentation (eval defaults to off).
 - `--domain-randomize` mirrors Gym's domain randomization flag.
 

@@ -104,6 +104,35 @@ class RewardPenaltyWrapper(gym.Wrapper):
         return obs, reward, terminated, truncated, info
 
 
+class SpeedRewardWrapper(gym.Wrapper):
+    """Adds a shaped reward proportional to the car's speed."""
+
+    def __init__(
+        self,
+        env: gym.Env,
+        scale: float = 0.0,
+        power: float = 1.0,
+        speed_key: str = "speed",
+    ):
+        super().__init__(env)
+        self.scale = float(scale)
+        self.power = float(power)
+        self.speed_key = speed_key
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        raw_speed = info.get(self.speed_key, 0.0)
+        try:
+            speed = float(raw_speed)
+        except (TypeError, ValueError):
+            speed = 0.0
+        bonus = self.scale * (speed ** self.power)
+        if bonus != 0.0:
+            reward += bonus
+            info["speed_reward"] = bonus
+        return obs, reward, terminated, truncated, info
+
+
 class RewardScaleWrapper(gym.Wrapper):
     """Uniformly scales rewards to stabilise critic targets."""
 
