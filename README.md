@@ -1,10 +1,26 @@
 ## CarRacing Pixel Control Toolkit
 
+### Project Goals
+- Train vision-based RL agents (SAC & PPO) on Gymnasium `CarRacing-v3` purely from pixels.
+- Keep the training pipeline reproducible and memory-aware (<=16 GB RAM).
+- Provide a reference feature extractor, environment wrappers, and CLIs for training/evaluation.
+- Support discrete and continuous control with optional reward shaping (grass penalty, speed bonus).
+
 ### Wrapper Order
-- **Train:** `RecordEpisodeStatistics -> RewardPenaltyWrapper -> (GentleShapingWrapper) -> (DiscretizeActionWrapper) -> ActionRepeat(k=4) -> (Grayscale, Resize) -> EnsureChannelLast -> (RandomShift training-only) -> VecFrameStack -> VecTransposeImage('first') -> VecMonitor`.
+- **Train:** `RecordEpisodeStatistics -> RewardPenaltyWrapper -> (SpeedRewardWrapper) -> (GentleShapingWrapper) -> (DiscretizeActionWrapper) -> ActionRepeat(k=4) -> (Grayscale, Resize) -> EnsureChannelLast -> (RandomShift training-only) -> VecFrameStack -> VecTransposeImage('first') -> VecMonitor`.
 - **Eval:** Same order with RandomShift disabled and GentleShaping optional (off by default). `DummyVecEnv` is always used for evaluation.
 
 All policies receive CHW uint8 tensors and the CNN encoder scales observations to `[0, 1]` exactly once. CarRacing rewards are further multiplied by `reward_scale` (default `0.1`) to stabilise critic targets; the original reward is exposed via `info["original_reward"]`.
+
+### Reward Shaping Summary
+- **RewardPenaltyWrapper**: detects grass via RGB pixels and subtracts a moderate penalty (default `1.5`), encouraging the agent to stay on asphalt without overwhelming the base reward.
+- **SpeedRewardWrapper** (optional): adds `scale * speed^power`, where `speed` comes from `info["speed"]`. This nudges the policy toward maintaining velocity for faster lap completion; the bonus is recorded in `info["speed_reward"]`.
+- **GentleShapingWrapper** (optional): discourages rapid steering oscillations and simultaneous brake/throttle usage in continuous mode.
+- **RewardScaleWrapper**: rescales the combined reward so critic targets remain in a narrow range (default x0.1). Disable with `--reward-scale 1.0` if you prefer raw rewards.
+
+### Feature Extractor
+- `CNNFeatureExtractor` implements a Nature-CNN-style encoder tailored to stacked grayscale frames (`VecFrameStack + VecTransposeImage`).
+- Observations are uint8; we normalise once inside the extractor to keep SB3's built-in normalisation disabled (`normalize_images=False`).
 
 ### Training
 ```bash
@@ -31,11 +47,12 @@ Implementation detail: we set `normalize_images=False` in SB3 policies so our cu
 
 ### Evaluation
 ```bash
-python evaluate.py --algo sac --model-path checkpoints/sac/best_model.zip --deterministic --episodes 10
+python evaluate.py --algo sac --model-path checkpoints/sac/best_model.zip --episodes 5 --deterministic --render-mode human
 ```
 Optional:
 - `--video-dir videos/` records evaluation rollouts (`VecVideoRecorder`).
 - `--random-shift` enables augmentation during eval if explicitly requested.
+- `--render-mode human` opens the native CarRacing window so you can watch the policy drive in real time (can be combined with video recording).
 
 ### Sanity Check
 `python sanity_check.py` instantiates train/eval envs, prints HWC vs CHW observation shapes, and verifies the CNN extractor emits a 512-D latent vector. Use this after changing wrappers or feature extractors.
@@ -46,3 +63,19 @@ Optional:
 - `learning_starts=50_000`, `train_freq=1`, `gradient_steps=1`
 - `ent_coef='auto_0.2'`, `gamma=0.99`, `tau=0.005`
 These fit comfortably in 16 GB RAM while retaining robust pixel-based performance.
+
+### Outputs & Logging
+- **Checkpoints**: saved to `./checkpoints/<algo>/` (e.g., `sac_carracing_final.zip`). The best model during training is also stored here via `EvalCallback`.
+- **Training logs**: SB3 console/TensorBoard data go to `./logs/<algo>/<timestamp>/` and `./tb/<algo>/`.
+- **VecMonitor CSVs**: each run keeps `monitor/monitor.csv` for episodic stats.
+- **Video recordings**: when enabled via CLI, MP4s are placed in the directory you provide.
+
+### Reproducibility
+- `set_global_seeds` seeds Python `random`, NumPy, and (if available) Torch/CUDA.
+- Vector envs are seeded per-worker (`seed + env_idx`) so SubprocVecEnv and DummyVecEnv produce deterministic rollouts given the same seed.
+
+### What We're Learning
+- Continuous-control SAC from high-dimensional pixels benefits from gentle reward shaping, action repeat, and data augmentation.  
+- Speed-based bonuses encourage lap-time optimisation without destabilising learning when scaled modestly (e.g., 0.02-0.05).  
+- Keeping rewards within a narrow numeric range (`reward_scale`) reduces critic loss spikes and avoids entropy collapse.
+- PPO serves as a baseline to validate the preprocessing stack--if PPO improves, the wrappers and feature extractor are wired correctly even before SAC converges.
