@@ -1,5 +1,0 @@
-2025-11-02 10:03:07,240 [INFO] ==================================================
-2025-11-02 10:03:07,241 [INFO]        INICIANDO ENTRENAMIENTO                    
-2025-11-02 10:03:07,241 [INFO] ==================================================
-2025-11-02 10:03:07,241 [INFO] Estrategia: Sin modificar entorno. El agente debe aprender control continuo.
-2025-11-02 10:03:07,241 [INFO] Total timesteps: 5000000
