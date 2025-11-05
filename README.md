@@ -7,14 +7,15 @@
 - Support discrete and continuous control with optional reward shaping (grass penalty, speed bonus).
 
 ### Wrapper Order
-- **Train:** `RecordEpisodeStatistics -> RewardPenaltyWrapper -> (SpeedRewardWrapper) -> (GentleShapingWrapper) -> (DiscretizeActionWrapper) -> ActionRepeat(k=4) -> (Grayscale, Resize) -> EnsureChannelLast -> (RandomShift training-only) -> VecFrameStack -> VecTransposeImage('first') -> VecMonitor`.
+- **Train:** `RecordEpisodeStatistics -> RewardPenaltyWrapper -> (SpeedRewardWrapper) -> (TrackEdgePenaltyWrapper) -> (GentleShapingWrapper) -> (DiscretizeActionWrapper) -> ActionRepeat(k=4) -> (Grayscale, Resize) -> EnsureChannelLast -> (RandomShift training-only) -> VecFrameStack -> VecTransposeImage('first') -> VecMonitor`.
 - **Eval:** Same order with RandomShift disabled and GentleShaping optional (off by default). `DummyVecEnv` is always used for evaluation.
 
 All policies receive CHW uint8 tensors and the CNN encoder scales observations to `[0, 1]` exactly once. CarRacing rewards are further multiplied by `reward_scale` (default `0.1`) to stabilise critic targets; the original reward is exposed via `info["original_reward"]`.
 
 ### Reward Shaping Summary
 - **RewardPenaltyWrapper**: detects grass via RGB pixels and subtracts a moderate penalty (default `1.5`), encouraging the agent to stay on asphalt without overwhelming the base reward.
-- **SpeedRewardWrapper** (optional): adds `scale * speed^power`, where `speed` comes from `info["speed"]`. This nudges the policy toward maintaining velocity for faster lap completion; the bonus is recorded in `info["speed_reward"]`.
+- **SpeedRewardWrapper**: adds `scale * speed^power`, using the simulator-provided `info["speed"]`. Defaults (`scale=0.03`, `power=0.6`) reward sustained pace while capping runaway bonuses; the shaping term is exposed as `info["speed_reward"]`.
+- **TrackEdgePenaltyWrapper**: watches the `info["track"]` rangefinder distances and subtracts a speed-weighted penalty when the car hugs the edge (default threshold `0.65`, scale `0.05`). This keeps curves tight without sacrificing aggression.
 - **GentleShapingWrapper** (optional): discourages rapid steering oscillations and simultaneous brake/throttle usage in continuous mode.
 - **RewardScaleWrapper**: rescales the combined reward so critic targets remain in a narrow range (default x0.1). Disable with `--reward-scale 1.0` if you prefer raw rewards.
 
@@ -36,7 +37,8 @@ Key toggles:
 - `--discrete-actions` / `--continuous-actions` switch between discrete wrapper and native continuous control.
 - `--action-repeat K` adjusts frame skipping (default 4).
 - `--use-gentle-shaping` (train) and `--gentle-shaping-eval` (eval) toggle shaping penalties.
-- `--speed-reward-scale` / `--speed-reward-power` add optional bonuses proportional to the car's speed.
+- `--speed-reward-scale` / `--speed-reward-power` shape the speed bonus (defaults 0.03 and 0.6).
+- `--use-track-penalty` / `--disable-track-penalty` and `--track-edge-threshold`, `--track-edge-scale` control the edge-avoidance shaping.
 - `--reward-penalty-value` / `--reward-scale` tune shaping severity and overall reward magnitude (set scale to `1.0` to disable scaling).
 - `--random-shift-train` / `--random-shift-eval` control DrQ augmentation (eval defaults to off).
 - `--domain-randomize` mirrors Gym's domain randomization flag.
@@ -77,5 +79,6 @@ These fit comfortably in 16 GB RAM while retaining robust pixel-based performanc
 ### What We're Learning
 - Continuous-control SAC from high-dimensional pixels benefits from gentle reward shaping, action repeat, and data augmentation.  
 - Speed-based bonuses encourage lap-time optimisation without destabilising learning when scaled modestly (e.g., 0.02-0.05).  
+- Edge-aware penalties derived from the track sensors keep the agent centered through high-speed curves.
 - Keeping rewards within a narrow numeric range (`reward_scale`) reduces critic loss spikes and avoids entropy collapse.
 - PPO serves as a baseline to validate the preprocessing stack--if PPO improves, the wrappers and feature extractor are wired correctly even before SAC converges.

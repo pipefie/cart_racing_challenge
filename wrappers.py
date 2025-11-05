@@ -133,6 +133,40 @@ class SpeedRewardWrapper(gym.Wrapper):
         return obs, reward, terminated, truncated, info
 
 
+class TrackEdgePenaltyWrapper(gym.Wrapper):
+    """Penalises hugging the track edge to keep curves tight and safe."""
+
+    def __init__(
+        self,
+        env: gym.Env,
+        threshold: float = 0.65,
+        scale: float = 0.05,
+        track_key: str = "track",
+        speed_key: str = "speed",
+    ):
+        super().__init__(env)
+        self.threshold = float(threshold)
+        self.scale = float(scale)
+        self.track_key = track_key
+        self.speed_key = speed_key
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        track = info.get(self.track_key, None)
+        if track is not None:
+            track = np.asarray(track, dtype=np.float32)
+            if track.size > 0:
+                min_dist = float(np.min(track))
+                margin = self.threshold - min_dist
+                if margin > 0:
+                    speed = float(info.get(self.speed_key, 0.0))
+                    penalty = self.scale * margin * max(speed, 0.0)
+                    if penalty > 0.0:
+                        reward -= penalty
+                        info["edge_penalty"] = penalty
+        return obs, reward, terminated, truncated, info
+
+
 class RewardScaleWrapper(gym.Wrapper):
     """Uniformly scales rewards to stabilise critic targets."""
 

@@ -29,6 +29,7 @@ from wrappers import (
     GentleShapingWrapper,
     RandomShift,
     RewardPenaltyWrapper,
+    TrackEdgePenaltyWrapper,
     SpeedRewardWrapper,
     RewardScaleWrapper,
 )
@@ -50,6 +51,9 @@ class EnvConfig:
     reward_green_ratio: float = 1.3
     speed_reward_scale: float = 0.0
     speed_reward_power: float = 1.0
+    use_track_edge_penalty: bool = True
+    track_edge_threshold: float = 0.65
+    track_edge_scale: float = 0.05
     reward_scale: float = 1.0
     use_gentle_shaping: bool = False
     gentle_lambda_delta: float = 1e-3
@@ -99,6 +103,13 @@ def make_env(
                 env,
                 scale=cfg.speed_reward_scale,
                 power=cfg.speed_reward_power,
+            )
+
+        if cfg.use_track_edge_penalty:
+            env = TrackEdgePenaltyWrapper(
+                env,
+                threshold=cfg.track_edge_threshold,
+                scale=cfg.track_edge_scale,
             )
 
         if cfg.gray:

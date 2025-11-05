@@ -63,8 +63,11 @@ DEFAULTS: Dict[str, Any] = {
     "use_reward_penalty": True,
     "reward_penalty_value": 1.5,
     "reward_green_ratio": 1.3,
-    "speed_reward_scale": 0.0,
-    "speed_reward_power": 1.0,
+    "speed_reward_scale": 0.03,
+    "speed_reward_power": 0.6,
+    "use_track_edge_penalty": True,
+    "track_edge_threshold": 0.65,
+    "track_edge_scale": 0.05,
     "reward_scale": 0.1,
     "use_gentle_shaping": False,
     "gentle_shaping_eval": False,
@@ -117,6 +120,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reward-green-threshold", type=float, default=None)
     parser.add_argument("--speed-reward-scale", type=float, default=None)
     parser.add_argument("--speed-reward-power", type=float, default=None)
+    parser.add_argument("--use-track-penalty", action="store_true")
+    parser.add_argument("--disable-track-penalty", action="store_true")
+    parser.add_argument("--track-edge-threshold", type=float, default=None)
+    parser.add_argument("--track-edge-scale", type=float, default=None)
     parser.add_argument("--reward-scale", type=float, default=None)
     parser.add_argument("--use-gentle-shaping", action="store_true")
     parser.add_argument("--gentle-shaping-eval", action="store_true")
@@ -211,6 +218,12 @@ def resolve_run_config(args: argparse.Namespace) -> Dict[str, Any]:
     maybe_update("reward_green_ratio", "reward_green_threshold")
     maybe_update("speed_reward_scale", "speed_reward_scale")
     maybe_update("speed_reward_power", "speed_reward_power")
+    if args.use_track_penalty:
+        cfg["use_track_edge_penalty"] = True
+    if args.disable_track_penalty:
+        cfg["use_track_edge_penalty"] = False
+    maybe_update("track_edge_threshold", "track_edge_threshold")
+    maybe_update("track_edge_scale", "track_edge_scale")
     maybe_update("reward_scale", "reward_scale")
     if args.use_gentle_shaping:
         cfg["use_gentle_shaping"] = True
@@ -268,6 +281,9 @@ def main() -> None:
         reward_green_ratio=cfg["reward_green_ratio"],
         speed_reward_scale=cfg["speed_reward_scale"],
         speed_reward_power=cfg["speed_reward_power"],
+        use_track_edge_penalty=cfg["use_track_edge_penalty"],
+        track_edge_threshold=cfg["track_edge_threshold"],
+        track_edge_scale=cfg["track_edge_scale"],
         reward_scale=cfg["reward_scale"],
         use_gentle_shaping=cfg["use_gentle_shaping"],
         gentle_lambda_delta=cfg["gentle_lambda_delta"],
