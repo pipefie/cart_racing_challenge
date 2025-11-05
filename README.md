@@ -6,6 +6,15 @@
 - Provide a reference feature extractor, environment wrappers, and CLIs for training/evaluation.
 - Support discrete and continuous control with optional reward shaping (grass penalty, speed bonus).
 
+### Background Concepts
+- **CarRacing-v3**: a procedurally generated 2D racetrack. Each step returns a 96x96 RGB image, a scalar reward, and telemetry in the `info` dict (`speed`, `track`, `lap_times`, etc.). Episodes last at most 1,000 steps or terminate early if the car goes off-road.
+- **Pixel-based RL**: the agent learns directly from images. We grayscale and stack four frames to capture motion, feed them through a Nature-CNN style encoder, and train the policy/value networks end-to-end.
+- **Algorithms**:
+  - *SAC* (Soft Actor-Critic) optimises expected return plus an entropy bonus to encourage exploration. Policies are stochastic during training; we evaluate with deterministic mean actions for repeatability.
+  - *PPO* (Proximal Policy Optimisation) is on-policy and easier to stabilise. It serves as a pipeline validator and a baseline.
+- **Deterministic evaluation**: `model.predict(..., deterministic=True)` removes sampling noise from the policy while the track remains random unless you fix the seed. This isolates policy quality from exploration randomness.
+- **Reward shaping**: additional rewards/penalties guide the agent toward desirable behaviour (stay on asphalt, carry speed, avoid hugging edges) without overriding the base objective. Careful scaling is critical so the shaping complements rather than dominates the task.
+
 ### Wrapper Order
 - **Train:** `RecordEpisodeStatistics -> RewardPenaltyWrapper -> (SpeedRewardWrapper) -> (TrackEdgePenaltyWrapper) -> (GentleShapingWrapper) -> (DiscretizeActionWrapper) -> ActionRepeat(k=4) -> (Grayscale, Resize) -> EnsureChannelLast -> (RandomShift training-only) -> VecFrameStack -> VecTransposeImage('first') -> VecMonitor`.
 - **Eval:** Same order with RandomShift disabled and GentleShaping optional (off by default). `DummyVecEnv` is always used for evaluation.
@@ -13,11 +22,17 @@
 All policies receive CHW uint8 tensors and the CNN encoder scales observations to `[0, 1]` exactly once. CarRacing rewards are further multiplied by `reward_scale` (default `0.1`) to stabilise critic targets; the original reward is exposed via `info["original_reward"]`.
 
 ### Reward Shaping Summary
-- **RewardPenaltyWrapper**: detects grass via RGB pixels and subtracts a moderate penalty (default `1.5`), encouraging the agent to stay on asphalt without overwhelming the base reward.
-- **SpeedRewardWrapper**: adds `scale * speed^power`, using the simulator-provided `info["speed"]`. Defaults (`scale=0.03`, `power=0.6`) reward sustained pace while capping runaway bonuses; the shaping term is exposed as `info["speed_reward"]`.
-- **TrackEdgePenaltyWrapper**: watches the `info["track"]` rangefinder distances and subtracts a speed-weighted penalty when the car hugs the edge (default threshold `0.65`, scale `0.05`). This keeps curves tight without sacrificing aggression.
-- **GentleShapingWrapper** (optional): discourages rapid steering oscillations and simultaneous brake/throttle usage in continuous mode.
-- **RewardScaleWrapper**: rescales the combined reward so critic targets remain in a narrow range (default x0.1). Disable with `--reward-scale 1.0` if you prefer raw rewards.
+- **RewardPenaltyWrapper**: detects grass via RGB pixels and subtracts a moderate penalty (default `1.5`). Keeps the car on asphalt without making grass contact catastrophic. Uses a heuristic green-channel dominance check on a patch under the car.
+- **SpeedRewardWrapper**: adds `scale * speed^power`, using `info["speed"]`. Defaults (`scale=0.03`, `power=0.6`) reward sustained pace yet dampen extreme speeds. Logged under `info["speed_reward"]`.
+  - `scale`: magnitude of the speed bonus. Increase gradually to push for faster laps.
+  - `power`: curvature of the bonus curve. Values <1 (concave) soften the incentive at very high speeds; >1 amplify high-speed rewards.
+- **TrackEdgePenaltyWrapper**: watches `info["track"]` (distance readings from range sensors) and subtracts a penalty when the car hugs the track edge. Penalty grows with both short distance and speed.
+  - `threshold`: minimum comfortable distance from the boundary (default `0.65`).
+  - `scale`: strength of the penalty (default `0.05`). Raising it enforces stricter lane-keeping.
+- **GentleShapingWrapper** (optional): discourages rapid steering oscillations and brake/throttle conflicts in continuous control.
+  - `lambda_delta_steer`: penalty for large action-to-action steering changes.
+  - `lambda_conflict`: penalty when brake and throttle are pressed together.
+- **RewardScaleWrapper**: multiplies the total reward (default factor `0.1`) to keep TD targets in a compact range. This prevents critic loss spikes and stabilises SAC entropy calibration; use `--reward-scale 1.0` to disable if you need raw magnitudes.
 
 ### Feature Extractor
 - `CNNFeatureExtractor` implements a Nature-CNN-style encoder tailored to stacked grayscale frames (`VecFrameStack + VecTransposeImage`).
